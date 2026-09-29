@@ -6,6 +6,8 @@ services:
     volumes:
       - ./data:/data
     environment:
+      - OPENQR_PRIVATE_MODE=${OPENQR_PRIVATE_MODE:-false}
+      - OPENQR_ALLOWED_EMAILS=${OPENQR_ALLOWED_EMAILS:-}
       - DATABASE_URL=/data/openqr.db
       # If running behind a TLS-terminating proxy, uncomment so Secure cookies
       # and rate-limit keying reflect the user-facing protocol/IP.

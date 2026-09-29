@@ -1,3 +1,4 @@
+import { canSignIn } from './private-mode';
 import { db } from '$lib/db';
 import { createHash, pbkdf2Sync, randomBytes, randomInt, timingSafeEqual } from 'crypto';
 import { sendOTP } from './mail';
@@ -172,6 +173,9 @@ export async function sendLoginCode(
     throw new OtpRateLimitError();
   }
 
+  // Preserve the generic send response without sending mail to unapproved accounts.
+  if (!canSignIn(normalizedEmail)) return;
+
   const user = db.prepare('SELECT id FROM users WHERE email = ?').get(normalizedEmail) as { id: number } | undefined;
 
   const code = generateOTP();
@@ -187,6 +191,8 @@ export async function sendLoginCode(
 
 export function verifyOTP(email: string, code: string, userAgent?: string | null): { success: boolean; sessionId?: string } {
   const normalizedEmail = email.trim().toLowerCase();
+  // Recheck here: a code may have been issued before private mode was enabled.
+  if (!canSignIn(normalizedEmail)) return { success: false };
   if (!consumeRateLimit(otpVerifyAttempts, normalizedEmail, 10, 10 * 60 * 1000)) {
     return { success: false };
   }

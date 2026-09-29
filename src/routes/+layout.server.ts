@@ -1,3 +1,4 @@
+import { isPrivateMode } from '$lib/server/private-mode';
 import type { LayoutServerLoad } from './$types';
 import { db } from '$lib/db';
 import { getBooleanSetting, getSetting } from '$lib/server/settings';
@@ -29,6 +30,7 @@ export const load: LayoutServerLoad = async ({ locals }) => {
   return {
     user,
     termsVersion,
+    privateMode: isPrivateMode(),
     defaults: {
       template: templates.includes(defaultTemplate) ? defaultTemplate : 'default',
       errorCorrection: ecLevels.includes(defaultEc) ? defaultEc : 'M'

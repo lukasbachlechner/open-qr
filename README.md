@@ -1347,3 +1347,36 @@ If you encounter any issues or have questions:
 ---
 
 Built with [SvelteKit](https://kit.svelte.dev/), [Tailwind CSS](https://tailwindcss.com/), and [SQLite](https://sqlite.org/).
+
+## Private mode
+
+Set these environment variables and restart the application:
+
+```env
+OPENQR_PRIVATE_MODE=true
+OPENQR_ALLOWED_EMAILS=you@example.com
+```
+
+Use a comma-separated list to allow additional people to register. On an existing
+installation, all existing accounts retain access. On a fresh installation, set
+at least one allowed email before signing in; the existing first-user-admin rule
+still applies. Removing an email from the list prevents signup but does not revoke
+an account that already exists. SMTP/Resend and the persistent `/data` volume are
+configured as usual.
+
+When enabled:
+- Logged-out visitors to app pages (including `/`, `/status`, `/terms`, and
+  `/report/...`) are redirected to `/login`.
+- The signed-in homepage shows only the QR generator, without marketing or footer.
+- Anonymous app API calls return 401, including generation, previews, images,
+  and detailed status. Existing session and API-key authentication still work.
+- Login, OTP verification, their supporting API endpoints, static assets, the
+  minimal `/api/v1/health` probe, and `/go/...` scanning routes remain public.
+  Password gates and scan redirects therefore continue to work on printed codes.
+- New-account OTP delivery and verification require an allowed email. The send
+  endpoint keeps its generic response for unapproved emails; no email is sent.
+- Private-mode responses use `Cache-Control: private, no-store`.
+
+`OPENQR_PRIVATE_MODE=false` (the default) restores upstream public behavior.
+These are deployment environment variables, not admin-panel database settings.
+Keep one replica, as required by the upstream SQLite and in-memory rate-limiting design.

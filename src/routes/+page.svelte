@@ -4,7 +4,7 @@
   import Footer from '$lib/components/Footer.svelte';
   import { appVersion } from '$lib/version';
 
-  /** @type {{ user?: { id: number; email: string; isAdmin: boolean; termsAcceptedVersion?: string | null } | null; termsVersion?: string; featureFlags?: { customSlugsEnabled?: boolean; customSlugsAdminOnly?: boolean }; defaults?: { template: string; errorCorrection: string } }} */
+  /** @type {{ privateMode?: boolean; user?: { id: number; email: string; isAdmin: boolean; termsAcceptedVersion?: string | null } | null; termsVersion?: string; featureFlags?: { customSlugsEnabled?: boolean; customSlugsAdminOnly?: boolean }; defaults?: { template: string; errorCorrection: string } }} */
   export let data;
 
   const features = [
@@ -75,6 +75,12 @@
 
 <Navbar user={data?.user} />
 
+{#if data.privateMode}
+  <main class="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+    <h1 class="mb-8 text-3xl font-semibold text-fg">Create a QR code</h1>
+    <QRGenerator user={data?.user} termsVersion={data?.termsVersion ?? ''} featureFlags={data?.featureFlags || {}} defaults={data?.defaults} />
+  </main>
+{:else}
 <!-- Hero ------------------------------------------------------------------ -->
 <section class="relative overflow-hidden border-b border-border">
   <div
@@ -311,3 +317,5 @@
 </section>
 
 <Footer />
+
+{/if}

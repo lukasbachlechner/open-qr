@@ -1,4 +1,5 @@
 import { json, type Handle } from '@sveltejs/kit';
+import { isPrivateMode, isPublicPrivateModeRoute } from '$lib/server/private-mode';
 import { randomBytes } from 'crypto';
 import { getUserBySession } from '$lib/server/auth';
 import { extractApiKey, getUserByApiKey } from '$lib/server/api-keys';
@@ -130,6 +131,17 @@ export const handle: Handle = async ({ event, resolve }) => {
     }
   }
 
+  const privateMode = isPrivateMode();
+  if (privateMode && !event.locals.user &&
+      !isPublicPrivateModeRoute(event.route.id, event.request.method)) {
+    const headers = { 'Cache-Control': 'private, no-store' };
+    if (isApi) {
+      return json({ success: false, error: { message: 'Authentication required' } },
+        { status: 401, headers });
+    }
+    return new Response(null, { status: 303, headers: { ...headers, Location: '/login' } });
+  }
+
   // Per-request CSP nonce: applied to every <script> in rendered pages so
   // SvelteKit's build-specific inline bootstrap is allowed without widening
   // script-src beyond 'self' + nonce.
@@ -140,5 +152,6 @@ export const handle: Handle = async ({ event, resolve }) => {
   for (const [key, value] of Object.entries(securityHeaders(nonce))) {
     response.headers.set(key, value);
   }
+  if (privateMode) response.headers.set('Cache-Control', 'private, no-store');
   return response;
 };
