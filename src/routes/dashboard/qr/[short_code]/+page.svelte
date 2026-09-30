@@ -125,11 +125,21 @@
   /** @type {AbortController | undefined} */
   let inflight;
   let mounted = false;
+  let previewVersion = 0;
+
+  function cancelPreview() {
+    clearTimeout(debounceHandle);
+    previewVersion += 1;
+    inflight?.abort();
+    previewing = false;
+  }
 
   async function runPreview() {
-    if (isStatic ? !payload : !targetUrl) return;
-    inflight?.abort();
-    inflight = new AbortController();
+    if (saving || (isStatic ? !payload : !targetUrl)) return;
+    cancelPreview();
+    const version = previewVersion;
+    const controller = new AbortController();
+    inflight = controller;
     previewing = true;
     try {
       const response = await fetch('/api/v1/qr?preview=1', {
@@ -138,28 +148,31 @@
         body: JSON.stringify(
           isStatic
             ? { kind: staticKind, payload: payload[staticKind], style: buildStyle() }
-            : { targetUrl, style: buildStyle() }
+            : { targetUrl, existingShortCode: data.qr.short_code, style: buildStyle() }
         ),
-        signal: inflight.signal
+        signal: controller.signal
       });
       const result = await response.json();
-      if (!result.success) {
+      if (version !== previewVersion) return;
+      if (!response.ok || !result.success) {
         throw new Error(result.error?.message || result.message || 'Preview failed');
       }
       previewUrl = result.data.dataUrl;
       svg = result.data.svg;
+      shortUrl = result.data.shortUrl || '';
       errorMessage = '';
     } catch (err) {
+      if (version !== previewVersion) return;
       if (err instanceof DOMException && err.name === 'AbortError') return;
       errorMessage = err instanceof Error ? err.message : 'Preview failed';
     } finally {
-      previewing = false;
+      if (version === previewVersion) previewing = false;
     }
   }
 
   function schedulePreview() {
-    if (!mounted) return;
-    clearTimeout(debounceHandle);
+    if (!mounted || saving) return;
+    cancelPreview();
     debounceHandle = setTimeout(runPreview, 200);
   }
 
@@ -188,12 +201,14 @@
   });
 
   onDestroy(() => {
-    clearTimeout(debounceHandle);
-    inflight?.abort();
+    mounted = false;
+    cancelPreview();
   });
 
   async function save() {
     saving = true;
+    // Invalidate both debounced and in-flight previews before persisting.
+    cancelPreview();
     message = '';
     errorMessage = '';
 
