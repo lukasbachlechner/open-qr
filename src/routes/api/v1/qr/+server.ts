@@ -1,6 +1,6 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { createQRCode, listQRCodes, generateQRImage, generateQRSVG, sanitizeQrCode } from '$lib/server/qr';
+import { createQRCode, getQRCode, listQRCodes, generateQRImage, generateQRSVG, sanitizeQrCode } from '$lib/server/qr';
 import { buildStaticPayload, isStaticKind } from '$lib/server/qr-payloads';
 import { getBooleanSetting } from '$lib/server/settings';
 import { buildShortUrl } from '$lib/server/urls';
@@ -33,6 +33,7 @@ export const POST: RequestHandler = async ({ request, locals, url, cookies, plat
     payload?: Record<string, unknown>;
     style?: Record<string, string>;
     shortCode?: string;
+    existingShortCode?: string;
     expiresAt?: string;
     password?: string;
     campaignId?: number;
@@ -42,7 +43,7 @@ export const POST: RequestHandler = async ({ request, locals, url, cookies, plat
   } catch {
     throw error(400, 'Request body must be valid JSON');
   }
-  const { targetUrl, kind, payload, style, shortCode, expiresAt, password, campaignId } = body;
+  const { targetUrl, kind, payload, style, shortCode, existingShortCode, expiresAt, password, campaignId } = body;
 
   // Static kinds (WiFi, vCard, …) encode their payload directly instead of a
   // short URL: the payload builder validates fields, and rendering skips the
@@ -73,13 +74,28 @@ export const POST: RequestHandler = async ({ request, locals, url, cookies, plat
       // the underlying target would actually be persistable.
       await assertSafeTargetUrl(targetUrl!, { threatIntel: false });
 
-      // QR encodes the short URL so scans route through /go/<code>; for the
-      // preview we use a same-length placeholder code so the module density
-      // matches the final persisted code exactly.
-      const placeholder = buildShortUrl('PREVIEW1', url.origin);
-      const dataUrl = await generateQRImage(placeholder, style);
-      const svg = await generateQRSVG(placeholder, style);
-      return json({ success: true, data: { dataUrl, svg } });
+      // An editor preview must encode the saved redirect URL, never the
+      // destination or the placeholder used before a code has been created.
+      let previewCode = 'PREVIEW1';
+      if (existingShortCode !== undefined) {
+        if (typeof existingShortCode !== 'string' || !existingShortCode) {
+          throw error(400, 'Invalid existing short code');
+        }
+        if (!locals.user) throw error(401, 'Authentication required');
+        const existing = getQRCode(existingShortCode);
+        if (!existing) throw error(404, 'QR code not found');
+        if (existing.user_id !== locals.user.id && !locals.user.isAdmin) {
+          throw error(403, 'Access denied');
+        }
+        if (existing.kind !== 'url') throw error(400, 'Expected a dynamic QR code');
+        previewCode = existing.short_code;
+      }
+      const encodedUrl = buildShortUrl(previewCode, url.origin);
+      const dataUrl = await generateQRImage(encodedUrl, style);
+      const svg = await generateQRSVG(encodedUrl, style);
+      // A new-code placeholder must not be advertised as a saved short URL.
+      const shortUrl = existingShortCode === undefined ? '' : encodedUrl;
+      return json({ success: true, data: { dataUrl, svg, shortUrl } });
     }
 
     if (staticKind) {
